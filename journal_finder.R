@@ -1,7 +1,5 @@
 library(tidyverse)
 library(dplyr)
-install.packages('writexl')
-library(writexl)
 
 Data <- read.csv("journal_ranking_data.CSV")
 
@@ -38,7 +36,7 @@ cleaned_data$Category <- gsub("\\(miscellaneous\\)", "", cleaned_data$Category)
 cleaned_data$Category <- gsub("\\[", "", cleaned_data$Category)
 cleaned_data$Category <- gsub("\\]", "", cleaned_data$Category)
 cleaned_data$Category <- gsub("\\'", "", cleaned_data$Category)
-cleaned_data$Category <- stringr::str_trim(cleaned_data$Category)
+cleaned_data$Category <- stringr::str_trim(cleaned_data$Category, side = "both")
 
 unique(cleaned_data$Category)
 
@@ -52,28 +50,35 @@ unique(cleaned_data[order(cleaned_data$Category),]$Category)
 #I am a PHD student  who is interested in learning more about what science can teach us about [Insert field]
 
 #what are some things that the field of social cognition has come to a consensus on?
-promts = c('I am a business executive who is interested in learning more about what science can teach us about',
-           'I am a PHD student  who is interested in learning more about what science can teach us about')
+personas = c('I am a PhD student',
+             'I am a university lecturer',
+             'I am a business executive',
+             'I am a high school teacher')
+
 categories <- unique(cleaned_data[order(cleaned_data$Category),]$Category)
 
+requests <- c('key ideas',
+              'consensus conclusions',
+              'unresolved questions')
 
 form <- expand.grid(
-  promt = promts,
+  persona = personas,
+  request = requests,
   field = categories
 )
 
 #randomize the rows:
-seed(42)
+set.seed(42)
 form <- form[sample(1:nrow(form),nrow(form), replace=FALSE),]
 
 #making the promts:
 
 queries <- c()
-sen_part_1 <- 'What are some things that the field of'
-sen_part_2 <- 'has come to a consensus on?'
 for (i in 1:nrow(form)) {
-  queries[i] <- paste(form[i,1],form[i,2],". ", sen_part_1, form[i,2],sen_part_2, sep = " ")
-  
+  queries[i] <- paste0(
+    form[i,"persona"], " who is interested in learning more about ", form[i,"field"],". ", 
+    "What are some ", form[i,"request"], " in the field of ", form[i,"field"], "?"
+    )
   }
 
 
