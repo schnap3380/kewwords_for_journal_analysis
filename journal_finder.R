@@ -31,6 +31,8 @@ cleaned_data <- top_journals_coverage %>%
   select(Title, Best.Categories)  %>%
   separate_rows(Best.Categories, sep = ",") %>%
   rename(Category = Best.Categories)
+# write_csv(cleaned_data, "journals_categories.csv")
+
 
 cleaned_data$Category <- gsub("\\(miscellaneous\\)", "", cleaned_data$Category)
 cleaned_data$Category <- gsub("\\[", "", cleaned_data$Category)
