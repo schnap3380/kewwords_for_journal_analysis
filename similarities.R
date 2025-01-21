@@ -84,11 +84,26 @@ articles <- articles |>
   select(-abstract)
 
 write_csv(articles, "data/articles_sims.csv")
+R.utils::gzip("data/articles_sims.csv")
 
 # I can't help but take a peak at the data...
 articles <- read_csv("data/articles_sims.csv")
 articles |> 
   separate_wider_delim(condition, "_", names = c("persona", "request")) |> 
-  ggplot(aes(year, sim, color = persona)) +
+  mutate(
+    persona = case_match(
+      persona,
+      "phd" ~ "I am a PhD student",
+      "lecturer" ~ "I am a university lecturer",
+      "teacher" ~ "I am a high school teacher",
+      "executive" ~ "I am a business executive"
+      ),
+    request = case_match(
+      request,
+      "consensus" ~ "consensus conclusions",
+      "ideas" ~ "key ideas",
+      "questions" ~ "unresolved questions"
+      )) |> 
+  ggplot(aes(year, sim, color = request)) +
     geom_smooth() +
-    facet_wrap(~request)
+    facet_wrap(~persona)
