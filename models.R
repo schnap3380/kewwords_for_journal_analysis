@@ -35,7 +35,13 @@ ggplot(data = articles , aes(year, sim, color = persona)) +
   geom_smooth() +
   facet_wrap(~request)
 
-#the model taht we want:
+ggplot(data = articles , aes(year, sim, color = request)) +
+  geom_smooth() +
+  facet_wrap(~persona)
+
+#gam model:
+{
+#the model that we want:
 model_gamm <- gamm(sim ~ s(year) + field * persona, 
                    random = list(persona = ~1, request = ~1 + year), 
                    data = articles)
@@ -53,8 +59,14 @@ data_sample <-  articles[sample(nrow(articles), size = floor(0.001 * nrow(articl
 model_gamm <- gamm(sim ~ s(year) + field * persona, 
                    random = list(persona = ~1, request = ~1 + year), 
                    data = data_sample)
-#Error in MEestimate(lmeSt, grps) : 
+
+#Error in MEestimate(lmeSt, grps) :   
 #Singularity in backsolve at level 0, block 1
+
+model_gamm <- gamm(sim ~ s(year), 
+                   random = list(persona = ~1, request = ~1 + year), 
+                   data = data_sample)
+summary(model_gamm)
 
 
 
@@ -72,9 +84,58 @@ model_gamm <- gamm(sim ~ s(year),
 summary(model_gamm$gam)
 plot(model_gamm$gam, select = 1)
 
+plot(ggeffects::ggpredict(model_gamm) , facet = TRUE)
 
+library('stats')
+predictions <-  predict.gam(model_gamm , data_sample)
+
+
+
+
+
+
+
+summary(model_gamm4$gam)
+
+vis.gam(model_gamm$gam)
+
+
+prediction <- predict(model_gamm$gam , data_sample)
+
+data_sample$pred <- prediction
+
+ggplot(data = data_sample , aes(year, pred, color = persona)) +
+  geom_smooth() +
+  facet_wrap(~request)
+
+
+}
+#polynomial:
+{
+
+data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
+
+poly_model <- lmer(sim ~ poly(year , degree = 4) + (1 | persona) + (1 + poly(year , degree = 4) | request)
+                 , data = data_sample)
+
+summary(poly_model)
+
+prediction <- poly_model %>% predict(data_sample)
+
+data_sample$pred <- prediction
+
+ggplot(data = data_sample , aes(year, pred, color = persona)) +
+  geom_smooth() +
+  facet_wrap(~request)
+
+ggplot(data = data_sample , aes(year, pred, color = request)) +
+  geom_smooth() +
+  facet_wrap(~persona)
+
+}
 
 #another option is gamm4:
+{
 install.packages('gamm4')
 library(gamm4)
 
@@ -84,11 +145,10 @@ model_gamm4 <- gamm4(sim ~ s(year) + field * persona,
 
 
 
+model_gamm4 <- gamm4(sim ~ s(year), 
+                     random = ~(1 | persona) + (1 + year | request), 
+                     data = data_sample)
 
-
-
-
-
-
+}
 
 
