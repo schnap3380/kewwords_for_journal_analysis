@@ -28,7 +28,7 @@ top_journals_coverage <- filtered_data %>%
 
 
 cleaned_data <- top_journals_coverage %>%
-  select(Title, Best.Categories)  %>%
+  select(Title, Best.Categories , Best.Subject.Area)  %>%
   separate_rows(Best.Categories, sep = ",") %>%
   rename(Category = Best.Categories)
 # write_csv(cleaned_data, "journals_categories.csv")
@@ -43,8 +43,9 @@ cleaned_data$Category <- stringr::str_trim(cleaned_data$Category, side = "both")
 unique(cleaned_data$Category)
 
 unique(cleaned_data[order(cleaned_data$Category),]$Category)
+unique(cleaned_data[order(cleaned_data$Best.Subject.Area),]$Best.Subject.Area)
 
-
+write_csv(cleaned_data, "data/category_by_subject.csv")
 #making queries:
 
 
