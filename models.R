@@ -76,7 +76,10 @@ articles$field <- factor(articles$field)
 
 #We will use bam model:
 {
-  data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
+
+
+  
+  data_sample <-  articles[sample(nrow(articles), size = floor(1 * nrow(articles))), ]
   
   mod <- bam(
     #sim ~ s(year, by = interaction(Subject, persona, request)) + Subject * persona * request,
@@ -89,6 +92,70 @@ articles$field <- factor(articles$field)
   
   summary(mod)
   
+  #trying:
+  {
+    data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
+    
+    complex_mod <- bam(
+      #sim ~ s(year, by = interaction(Subject, persona, request)) + Subject * persona * request,
+      sim ~ s(year, by = interaction(field, persona, request)) + field * persona * request,
+      #sim ~ s(year, by = persona) + persona,
+      #sim ~ s(year, by = field) + field,
+      data = data_sample
+    )
+    
+    summary(complex_mod)
+    
+    #predictions:
+    year_range <- range(data_sample$year)
+    field_levels <- unique(data_sample$field)
+    pred_data <- expand.grid(year = seq(from = year_range[1], to = year_range[2], by = 1),
+                             field = field_levels)
+    pred_data$sim_pred <- predict(complex_mod, newdata = pred_data, type = "response")
+    
+    # Find the year of the maximum sim for each field
+    peak_years <- pred_data %>%
+      group_by(field) %>%
+      summarise(YearOfMaxSim = year[which.max(sim_pred)],
+                MaxSim = max(sim_pred))
+    print(peak_years)
+    
+    ggplot(pred_data, aes(x = year, y = sim_pred, group = field, color = field)) +
+      geom_line() +  # Draw lines
+      labs(title = "Predicted SIM by Year for Each Field",
+           x = "Year",
+           y = "Predicted SIM",
+           color = "Field") +
+      #facet_wrap(~field, scales = "free_y") +  # Create a separate plot for each field
+      theme_minimal() +  # Use a minimal theme
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    #add ggcolorbrewer
+    
+    
+    
+    
+    
+    
+    
+    
+
+    # expect different subjects to follow different time trends:
+    trying_model <- bam(
+      sim ~ s(year, Subject, bs = "fs"), # fs = factor smooth interactions
+      data = data_sample
+    )
+    summary(trying_model)
+    
+
+    # expect different subjects to follow different time trends on articles:
+    trying_model <- bam(
+      sim ~ s(year, field, bs = "fs"), # fs = factor smooth interactions
+      data = articles
+    )
+    
+    
+  }
+  
   
   #instead of using it:
   library(marginaleffects)
@@ -96,6 +163,9 @@ articles$field <- factor(articles$field)
   avg_slopes(mod, variables = "year", by = c("year", "field"))
   plot_slopes(mod, variables = "year", by = c("year", "field")) + 
     geom_hline(yintercept = 0)
+  
+  
+  
   
   #I used it:
   
