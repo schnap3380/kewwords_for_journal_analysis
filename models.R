@@ -14,7 +14,7 @@ colnames(articles)
 colnames(articles)[5] <- "Category"
 colnames(articles)[9] <- "Subject"
 
-
+{
 articles |> 
   mutate(
     persona = case_match(
@@ -30,9 +30,10 @@ articles |>
       "ideas" ~ "key ideas",
       "questions" ~ "unresolved questions"
     )) 
-
+}
 
 #subject mapping : (maybe find a better way):
+{
 articles <- articles %>%
   mutate(
     field = case_when(
@@ -66,7 +67,7 @@ articles <- articles %>%
       TRUE ~ as.character(Subject)  # Default case to handle any unmatched conditions
     )
   )
-
+}
 
 articles$persona <- factor(articles$persona)
 articles$request <- factor(articles$request)
@@ -79,282 +80,185 @@ articles$field <- factor(articles$field)
 
 
   
-  data_sample <-  articles[sample(nrow(articles), size = floor(1 * nrow(articles))), ]
+  data_sample <-  articles[sample(nrow(articles), size = floor(0.1 * nrow(articles))), ]
   
   mod <- bam(
     #sim ~ s(year, by = interaction(Subject, persona, request)) + Subject * persona * request,
-    #sim ~ s(year, by = interaction(field, persona, request)) + field * persona * request,
-    #sim ~ s(year, by = persona) + persona,
-    sim ~ s(year, by = field) + field,
-    data = data_sample
-  )
-  
-  
+    sim ~ s(year, by = interaction(field, persona, request)) + field * persona * request,
+    #sim ~ s(year, by = field) + field,
+    data = data_sample)
   summary(mod)
   
-  #trying:
+
+  # trying to use slopes: (but it takes too long)
   {
-    data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
+  library(marginaleffects)
+  library(future)
+  plan(multisession, workers = 4)  # Use 4 CPU cores
     
-    complex_mod <- bam(
-      #sim ~ s(year, by = interaction(Subject, persona, request)) + Subject * persona * request,
-      sim ~ s(year, by = interaction(field, persona, request)) + field * persona * request,
-      #sim ~ s(year, by = persona) + persona,
-      #sim ~ s(year, by = field) + field,
-      data = data_sample
-    )
-    
-    summary(complex_mod)
-    
-    #predictions:
-    year_range <- range(data_sample$year)
-    field_levels <- unique(data_sample$field)
-    pred_data <- expand.grid(year = seq(from = year_range[1], to = year_range[2], by = 1),
-                             field = field_levels)
-    pred_data$sim_pred <- predict(complex_mod, newdata = pred_data, type = "response")
-    
-    # Find the year of the maximum sim for each field
-    peak_years <- pred_data %>%
-      group_by(field) %>%
-      summarise(YearOfMaxSim = year[which.max(sim_pred)],
-                MaxSim = max(sim_pred))
-    print(peak_years)
-    
-    ggplot(pred_data, aes(x = year, y = sim_pred, group = field, color = field)) +
-      geom_line() +  # Draw lines
-      labs(title = "Predicted SIM by Year for Each Field",
-           x = "Year",
-           y = "Predicted SIM",
-           color = "Field") +
-      #facet_wrap(~field, scales = "free_y") +  # Create a separate plot for each field
-      theme_minimal() +  # Use a minimal theme
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-    #add ggcolorbrewer
-    
-    
-    
-    
-    
-    
-    
-    
-
-    # expect different subjects to follow different time trends:
-    trying_model <- bam(
-      sim ~ s(year, Subject, bs = "fs"), # fs = factor smooth interactions
-      data = data_sample
-    )
-    summary(trying_model)
-    
-
-    # expect different subjects to follow different time trends on articles:
-    trying_model <- bam(
-      sim ~ s(year, field, bs = "fs"), # fs = factor smooth interactions
-      data = articles
-    )
-    
-    
+  # gratia
+  #avg_slopes(mod, variables = "year",  by = c("year", "field"))
+  #plot_slopes(mod, variables = "year", by = c("year", "field")) + geom_hline(yintercept = 0)
+  
+  # Compute slopes over time
+  slopes_data <- avg_slopes(mod, variables = "year",  by = c("year", "field"))
+  
   }
   
   
-  #instead of using it:
-  library(marginaleffects)
-  # gratia
-  avg_slopes(mod, variables = "year", by = c("year", "field"))
-  plot_slopes(mod, variables = "year", by = c("year", "field")) + 
-    geom_hline(yintercept = 0)
+
+  #Question 0:
+  #What is the expected curve of similarity with real research?
+  {
+  data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
   
+  mod_partial <- bam(
+    sim ~ s(year, by = field) + field * persona * request,
+    data = data_sample
+  )
+  summary(mod_partial)
   
+  data_for_slopes <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
+  slopes_data <- avg_slopes(mod_partial,newdata = data_for_slopes, variables = "year",  by = c("year", "field"))
   
-  
-  #I used it:
-  
-  #predictions:
+  #trying to use slope: work better then before but still not working
+  {
+  field_slopes <- slopes_data %>% arrange(desc(estimate))
+  ggplot(field_slopes, aes(x = reorder(field, estimate), y = estimate, ymin = conf.low, ymax = conf.high, fill = field)) +
+    geom_col() +
+    geom_errorbar(width = 0.2) +
+    coord_flip() +
+    labs(title = "How Up to Date LLMs Are Across Fields",
+         x = "Field",
+         y = "Marginal Effect of Year on Similarity") +
+    theme_minimal()
+  }
+  # Create a prediction grid for all combinations of year, field, persona, and request
   year_range <- range(data_sample$year)
   field_levels <- unique(data_sample$field)
-  pred_data <- expand.grid(year = seq(from = year_range[1], to = year_range[2], by = 1),
-                           field = field_levels)
-  pred_data$sim_pred <- predict(mod, newdata = pred_data, type = "response")
+  persona_levels <- unique(data_sample$persona)
+  request_levels <- unique(data_sample$request)
+  pred_data <- expand.grid(
+    year = seq(from = year_range[1], to = year_range[2], by = 1),
+    field = field_levels,
+    persona = persona_levels,
+    request = request_levels
+  )
   
-  # Find the year of the maximum sim for each field
-  peak_years <- pred_data %>%
-    group_by(field) %>%
-    summarise(YearOfMaxSim = year[which.max(sim_pred)],
-              MaxSim = max(sim_pred))
-  print(peak_years)
+  predictions <- predictions(mod_partial, newdata = pred_data, type = "response", vcov = TRUE) #confidence interval estimation only by year
+  pred_data$sim_pred <- predictions$estimate
+  pred_data$conf_low <- predictions$conf.low
+  pred_data$conf_high <- predictions$conf.high
   
-  ggplot(pred_data, aes(x = year, y = sim_pred, group = field, color = field)) +
-    geom_line() +  # Draw lines
+  agg_pred_data <- pred_data %>%
+    group_by(year, field) %>%
+    summarise(
+      mean_sim_pred = mean(sim_pred), 
+      conf_low = mean(conf_low),  # Approximate CI  | maybe use min?
+      conf_high = mean(conf_high),  # Approximate CI | maybe use max?
+      .groups = "drop"
+    )
+  
+  ggplot(agg_pred_data, aes(x = year, y = mean_sim_pred, group = field, color = field)) +
+    geom_line(size = 1) +  # Thicker lines for clarity
+    geom_ribbon(aes(ymin = conf_low, ymax = conf_high, fill = field), alpha = 0.2) +
     labs(title = "Predicted SIM by Year for Each Field",
          x = "Year",
          y = "Predicted SIM",
          color = "Field") +
-    #facet_wrap(~field, scales = "free_y") +  # Create a separate plot for each field
-    theme_minimal() +  # Use a minimal theme
+    scale_color_brewer(palette = "Set1") +  # Add color palette
+    theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  }
   
+  
+  
+  
+  #Question 2:
+  #Which Questions Get the Most Scientific Answers?
+  request_slopes <- avg_slopes(mod_partial, variables = "request")
+  
+  # Sort by scientific accuracy
+  request_slopes <- request_slopes %>% arrange(desc(estimate))
+  
+  print(request_slopes)
+  
+  # Plot results
+  ggplot(request_slopes, aes(x = reorder(request, estimate), y = estimate, ymin = conf.low, ymax = conf.high, fill = request)) +
+    geom_col() +
+    geom_errorbar(width = 0.2) +
+    coord_flip() +
+    labs(title = "Which Questions Get the Most Scientific Answers?",
+         x = "Question Type",
+         y = "Effect on Similarity") +
+    theme_minimal()
+  
+  
+  
+  
+  
+  
+  #old Question 0:
+  {
+    
+    #What is the expected curve of similarity with real research?
+    # using Predictions:
+    year_range <- range(data_sample$year)
+    field_levels <- unique(data_sample$field)
+    persona_levels <- unique(data_sample$persona)
+    request_levels <- unique(data_sample$request)
+    
+    # Create a prediction grid for all combinations of year, field, persona, and request
+    pred_data <- expand.grid(
+      year = seq(from = year_range[1], to = year_range[2], by = 1),
+      field = field_levels,
+      persona = persona_levels,
+      request = request_levels
+    )
+    
+    # Generate predictions
+    pred_data$sim_pred <- predict(mod, newdata = pred_data, type = "response")
+    
+    
+    
+    
+    
+    pred_summary <- pred_data %>%
+      group_by(year, field) %>%
+      summarise(mean_sim_pred = mean(sim_pred), .groups = "drop")
+    
+    
+    
+    # Find the year of maximum predicted SIM for each field
+    peak_years <- pred_summary %>%
+      group_by(field) %>%
+      summarise(YearOfMaxSim = year[which.max(mean_sim_pred)],
+                MaxSim = max(mean_sim_pred), .groups = "drop")
+    
+    print(peak_years)
+    
+    # Plot
+    ggplot(pred_summary, aes(x = year, y = mean_sim_pred, group = field, color = field)) +
+      geom_line(size = 1) +  # Thicker lines for clarity
+      labs(title = "Predicted SIM by Year for Each Field",
+           x = "Year",
+           y = "Predicted SIM",
+           color = "Field") +
+      scale_color_brewer(palette = "Set1") +  # Add color palette
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    }
+
   
 }  
 
 
 
-#gam model:
-{
-  
-data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
-mod <- bam(
-  #sim ~ s(year, by = interaction(Subject, persona, request)) + Subject * persona * request,
-  
-  #sim ~ s(year, by = persona) + persona,
-  data = data_sample
-)
-
-summary(mod)
-plot(mod,pages=1,rug=FALSE)
-plot(mod,pages=1,rug=FALSE,seWithMean=TRUE)
-
-
-library(marginaleffects)
-# gratia
-avg_slopes(mod, variables = "year", by = c("year", "persona"))
-plot_slopes(mod, variables = "year", by = c("year", "persona")) + 
-  geom_hline(yintercept = 0)
-
-
-
-}
-
-#gam model:
-{
-
-model1 <- gamm(
-  sim ~ s(year) + field*persona, 
-  data= articles, 
-  random = list(persona = ~1, field = ~1)
-)
-
-ggplot(data = articles , aes(year, sim, color = persona)) +
-  geom_smooth() +
-  facet_wrap(~request)
-
-ggplot(data = articles , aes(year, sim, color = request)) +
-  geom_smooth() +
-  facet_wrap(~persona)
-
-
-#the model that we want:
-model_gamm <- gamm(sim ~ s(year) + field * persona, 
-                   random = list(persona = ~1, request = ~1 + year), 
-                   data = articles)
-
-#but first i try this one and got error:
-model_gamm <- gamm(sim ~ s(year), 
-                   random = list(persona = ~1, request = ~1 + year), 
-                   data = articles)
-#Error: cannot allocate vector of size 4261.1 Gb
-
-#so i try to use smaller data:
-
-data_sample <-  articles[sample(nrow(articles), size = floor(0.001 * nrow(articles))), ]
-
-model_gamm <- gamm(sim ~ s(year) + field * persona, 
-                   random = list(persona = ~1, request = ~1 + year), 
-                   data = data_sample)
-
-#Error in MEestimate(lmeSt, grps) :   
-#Singularity in backsolve at level 0, block 1
-
-model_gamm <- gamm(sim ~ s(year), 
-                   random = list(persona = ~1, request = ~1 + year), 
-                   data = data_sample)
-summary(model_gamm)
-
-
-
-
-data_sample <-  articles[sample(nrow(articles), size = floor(0.1 * nrow(articles))), ]
-
-model_gamm <- gamm(sim ~ s(year), 
-                   random = list(persona = ~1, request = ~1 + year), 
-                   data = data_sample)
-#Error: cannot allocate vector of size 42.4 Gb
-
-#0.01 working:
-data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
-
-model_gamm <- gamm(sim ~ s(year), 
-                   random = list(persona = ~1, request = ~1 + year), 
-                   data = data_sample)
-
-
-summary(model_gamm$gam)
-plot(model_gamm$gam, select = 1)
-
-plot(ggeffects::ggpredict(model_gamm) , facet = TRUE)
-
-library('stats')
-predictions <-  predict.gam(model_gamm , data_sample)
 
 
 
 
 
 
-
-summary(model_gamm4$gam)
-
-vis.gam(model_gamm$gam)
-
-
-prediction <- predict(model_gamm$gam , data_sample)
-
-data_sample$pred <- prediction
-
-ggplot(data = data_sample , aes(year, pred, color = persona)) +
-  geom_smooth() +
-  facet_wrap(~request)
-
-
-}
-#polynomial:
-{
-library(lme4)
-data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
-
-poly_model <- lmer(sim ~ poly(year , degree = 4) + (1 | persona) + (1 + poly(year , degree = 4) | request)
-                 , data = data_sample)
-
-summary(poly_model)
-
-prediction <- poly_model %>% predict(data_sample)
-
-data_sample$pred <- prediction
-
-ggplot(data = data_sample , aes(year, pred, color = persona)) +
-  geom_smooth() +
-  facet_wrap(~request)
-
-ggplot(data = data_sample , aes(year, pred, color = request)) +
-  geom_smooth() +
-  facet_wrap(~persona)
-
-}
-
-#another option is gamm4:
-{
-install.packages('gamm4')
-library(gamm4)
-
-model_gamm4 <- gamm4(sim ~ s(year) + field * persona, 
-                     random = ~(1 | persona) + (1 + year | request), 
-                     data = data_sample)
-
-
-
-model_gamm4 <- gamm4(sim ~ s(year), 
-                     random = ~(1 | persona) + (1 + year | request), 
-                     data = data_sample)
-
-}
 
 
