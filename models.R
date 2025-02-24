@@ -93,8 +93,6 @@ articles$field <- factor(articles$field)
   # trying to use slopes: (but it takes too long)
   {
   library(marginaleffects)
-  library(future)
-  plan(multisession, workers = 4)  # Use 4 CPU cores
     
   # gratia
   #avg_slopes(mod, variables = "year",  by = c("year", "field"))
@@ -169,6 +167,60 @@ articles$field <- factor(articles$field)
     scale_color_brewer(palette = "Set1") +  # Add color palette
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  #scatter for the MaxSim:
+  {
+  peak_years <- agg_pred_data %>%
+    group_by(field) %>%
+    summarise(YearOfMaxSim = year[which.max(mean_sim_pred)],
+              Sim = max(mean_sim_pred),
+              conf_low = conf_low[which.max(mean_sim_pred)],  # Approximate CI  | maybe use min?
+              conf_high = conf_high[which.max(mean_sim_pred)],  # Approximate CI | maybe use max?
+              .groups = "drop")
+  
+  
+  # Create the scatter plot with switched axes
+  ggplot(peak_years, aes(x = field, y = Sim, color = YearOfMaxSim)) +
+    geom_point(size = 4) +  # Scatter plot points
+    geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.2, color = "black") +  # Vertical error bars for CI
+    scale_color_viridis_c(option = "C" , direction = -1) +  # Color scale for YearOfMaxSim
+    labs(
+      title = "Peak Similarity Across Fields",
+      x = "Field",
+      y = "Similarity (Sim)",
+      color = "Year of Maximum Similarity"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(size = 12, angle = 45, hjust = 1),  # Rotate field labels for readability
+      axis.text.y = element_text(size = 12),
+      plot.title = element_text(size = 14, face = "bold")
+    )
+    }
+  #also option:
+  {
+    library(ggplot2)
+    
+    # Create the scatter plot with correct x-axis range
+    ggplot(peak_years, aes(x = YearOfMaxSim, y = field, color = Sim)) +
+      geom_point(size = 4) +  # Scatter plot points
+      geom_errorbarh(aes(xmin = conf_low, xmax = conf_high), height = 0.2, color = "black") +  # Horizontal error bars for CI
+      scale_x_continuous(limits = c(2005, 2024), breaks = seq(2005, 2024, by = 2)) +  # Fix x-axis range
+      scale_color_viridis_c(option = "C") +  # Color scale for similarity
+      labs(
+        title = "Peak Year of Similarity by Field",
+        x = "Year of Maximum Similarity",
+        y = "Field",
+        color = "Similarity (Sim)"
+      ) +
+      theme_minimal() +
+      theme(
+        axis.text.y = element_text(size = 12),
+        axis.text.x = element_text(size = 12),
+        plot.title = element_text(size = 14, face = "bold")
+      )
+    
+    }
   }
   
   
