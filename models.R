@@ -1,6 +1,6 @@
 library(mgcv)
 library(tidyverse)
-
+library(marginaleffects) #for predictions and slopes
 
 subjects <- read_csv("data/category_by_subject.csv")
 articles <- read_csv("data/articles_sims.csv.gz") |> 
@@ -92,7 +92,7 @@ articles$field <- factor(articles$field)
 
   # trying to use slopes: (but it takes too long)
   {
-  library(marginaleffects)
+
     
   # gratia
   #avg_slopes(mod, variables = "year",  by = c("year", "field"))
@@ -103,12 +103,12 @@ articles$field <- factor(articles$field)
   
   }
   
-  
+  #the used model is in Q0:
 
   #Question 0:
   #What is the expected curve of similarity with real research?
   {
-  data_sample <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
+  data_sample <-  articles[sample(nrow(articles), size = floor(1 * nrow(articles))), ]
   
   mod_partial <- bam(
     sim ~ s(year, by = field) + field * persona * request,
@@ -116,11 +116,11 @@ articles$field <- factor(articles$field)
   )
   summary(mod_partial)
   
-  data_for_slopes <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
-  slopes_data <- avg_slopes(mod_partial,newdata = data_for_slopes, variables = "year",  by = c("year", "field"))
-  
+
   #trying to use slope: work better then before but still not working
   {
+  data_for_slopes <-  articles[sample(nrow(articles), size = floor(0.01 * nrow(articles))), ]
+  slopes_data <- avg_slopes(mod_partial,newdata = data_for_slopes, variables = "year",  by = c("year", "field"))
   field_slopes <- slopes_data %>% arrange(desc(estimate))
   ggplot(field_slopes, aes(x = reorder(field, estimate), y = estimate, ymin = conf.low, ymax = conf.high, fill = field)) +
     geom_col() +
@@ -131,6 +131,7 @@ articles$field <- factor(articles$field)
          y = "Marginal Effect of Year on Similarity") +
     theme_minimal()
   }
+  
   # Create a prediction grid for all combinations of year, field, persona, and request
   year_range <- range(data_sample$year)
   field_levels <- unique(data_sample$field)
@@ -154,20 +155,90 @@ articles$field <- factor(articles$field)
       mean_sim_pred = mean(sim_pred), 
       conf_low = mean(conf_low),  # Approximate CI  | maybe use min?
       conf_high = mean(conf_high),  # Approximate CI | maybe use max?
-      .groups = "drop"
-    )
+      .groups = "drop")
   
+  #final option:
+  {
+    library(viridis)
+    
+    ggplot(agg_pred_data, aes(x = year, y = mean_sim_pred, group = field, color = field)) +
+      geom_smooth(method = "loess", span = 0.3, se = FALSE, size = 1.2) +  # LOESS smoothing for a smooth curve
+      geom_ribbon(aes(ymin = conf_low, ymax = conf_high, fill = field), alpha = 0.15, color = NA) +  # Soft confidence bands
+      scale_color_viridis_d(option = "C", end = 0.85) +  # Elegant colors
+      scale_fill_viridis_d(option = "C", end = 0.85) +
+      labs(
+        title = "Smoothed Predicted Similarity Over Time by Field",
+        x = "Year",
+        y = "Predicted SIM"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12),
+        legend.position = "bottom",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12),
+        #panel.grid.major = element_blank(),
+        #panel.grid.minor = element_blank()
+      )
+    
+    }
+  #another option for plot:
+  {
   ggplot(agg_pred_data, aes(x = year, y = mean_sim_pred, group = field, color = field)) +
     geom_line(size = 1) +  # Thicker lines for clarity
-    geom_ribbon(aes(ymin = conf_low, ymax = conf_high, fill = field), alpha = 0.2) +
+    geom_ribbon(aes(ymin = conf_low, ymax = conf_high), alpha = 0.2 , fill = NA ) +
+    scale_color_viridis_d(option = "D", end = 0.85) +  # Modern color palette for lines
+    scale_fill_viridis_d(option = "D", end = 0.85) +  # Same palette for confidence intervals
     labs(title = "Predicted SIM by Year for Each Field",
          x = "Year",
          y = "Predicted SIM",
          color = "Field") +
-    scale_color_brewer(palette = "Set1") +  # Add color palette
     theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Center title
+      axis.text.x = element_text(size = 12),
+      axis.text.y = element_text(size = 12),
+      legend.position = "bottom",  # Move legend for better space management
+      legend.title = element_blank(),  # Remove redundant "Field" title
+      legend.text = element_text(size = 12),
+      panel.grid.major = element_blank(),  # Remove excessive grid lines
+      panel.grid.minor = element_blank()
+    )
+    }
+  #or:
+  {
+    library(ggplot2)
+    library(viridis)
+    
+    ggplot(agg_pred_data, aes(x = year, y = mean_sim_pred, group = field, color = field)) +
+      geom_line(size = 1.2) +  # Thicker lines for clarity
+      geom_ribbon(aes(ymin = conf_low, ymax = conf_high, fill = field), alpha = 0.15, color = NA) +  # Confidence bands with no border
+      scale_color_viridis_d(option = "C", end = 0.85) +  # Modern color palette for lines
+      scale_fill_viridis_d(option = "C", end = 0.85) +  # Same palette for confidence intervals
+      labs(
+        title = "Predicted Similarity Over Time by Field",
+        x = "Year",
+        y = "Predicted SIM"
+      ) +
+      theme_minimal(base_size = 14) +  # Set clean base theme with readable text
+      theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Centered bold title
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12),
+        legend.position = "bottom",  # Move legend for better space usage
+        legend.title = element_blank(),  # Remove redundant "Field" title
+        legend.text = element_text(size = 12),
+        panel.grid.major = element_blank(),  # Remove unnecessary major grid lines
+        panel.grid.minor = element_blank()  # Remove unnecessary minor grid lines
+      )
+    
+  }
+  }
+  #Question 1:
+  #For which fields are LLMs most up to date?
+  {
   #scatter for the MaxSim:
   {
   peak_years <- agg_pred_data %>%
@@ -197,7 +268,7 @@ articles$field <- factor(articles$field)
       plot.title = element_text(size = 14, face = "bold")
     )
     }
-  #also option:
+  #also option: (but no CI)
   {
     library(ggplot2)
     
@@ -222,30 +293,95 @@ articles$field <- factor(articles$field)
     
     }
   }
-  
-  
-  
-  
   #Question 2:
   #Which Questions Get the Most Scientific Answers?
+  {
+  #trying to use slope:
+  {
+  #this take too long:
   request_slopes <- avg_slopes(mod_partial, variables = "request")
   
-  # Sort by scientific accuracy
-  request_slopes <- request_slopes %>% arrange(desc(estimate))
+  #so I try this:
+  request_effects <- slopes(mod_partial, variables = "request", newdata = sample_n(data_sample, 100000))
   
+  # Sort by scientific accuracy
+  request_slopes <- request_effects %>% arrange(desc(estimate))
   print(request_slopes)
   
-  # Plot results
-  ggplot(request_slopes, aes(x = reorder(request, estimate), y = estimate, ymin = conf.low, ymax = conf.high, fill = request)) +
-    geom_col() +
-    geom_errorbar(width = 0.2) +
-    coord_flip() +
-    labs(title = "Which Questions Get the Most Scientific Answers?",
-         x = "Question Type",
-         y = "Effect on Similarity") +
+
+  request_summary <- request_effects %>%
+    group_by(request) %>%
+    summarise(
+      mean_effect = mean(estimate),
+      conf_low = mean(conf.low),
+      conf_high = mean(conf.high)
+    )
+
+  ggplot(request_summary, aes(x = reorder(request, mean_effect), y = mean_effect, fill = request)) +
+    geom_col(show.legend = FALSE) +  
+    geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.2, color = "black") +  
+    coord_flip() +  
+    labs(
+      title = "Which Question Types Get the Most Scientific Answers?",
+      x = "Question Type",
+      y = "Effect on Similarity"
+    ) +
     theme_minimal()
+  }
   
+  #using the predictions like before:
+  #Which persona Get the Most Scientific Answers?
+  {
+  agg_pred_data_request <- pred_data %>%
+    group_by(request) %>%
+    summarise(
+      mean_sim_pred = mean(sim_pred), 
+      conf_low = mean(conf_low),  # Approximate CI  | maybe use min?
+      conf_high = mean(conf_high),  # Approximate CI | maybe use max?
+      .groups = "drop")
+
+  ggplot(agg_pred_data_request, aes(x = reorder(request, mean_sim_pred), y = mean_sim_pred, color = request)) +
+    geom_point(size = 4) +  # Bar plot without legend
+    geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.2, color = "black") +  # Confidence intervals
+    labs(
+      title = "Predicted Similarity by Question Type",
+      x = "Question Type",
+      y = "Mean Predicted Similarity"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.y = element_text(size = 12),
+      axis.text.x = element_text(size = 12),
+      plot.title = element_text(size = 14, face = "bold")
+    )
+  }
   
+  #Which persona Get the Most Scientific Answers?
+  {
+  agg_pred_data_persona <- pred_data %>%
+    group_by(persona) %>%
+    summarise(
+      mean_sim_pred = mean(sim_pred), 
+      conf_low = mean(conf_low),  # Approximate CI  | maybe use min?
+      conf_high = mean(conf_high),  # Approximate CI | maybe use max?
+      .groups = "drop")
+  
+  ggplot(agg_pred_data_persona, aes(x = reorder(persona, mean_sim_pred), y = mean_sim_pred, color = persona)) +
+    geom_point(size = 4) +  # Bar plot without legend
+    geom_errorbar(aes(ymin = conf_low, ymax = conf_high), width = 0.2, color = "black") +  # Confidence intervals
+    labs(
+      title = "Predicted Similarity by Persona Type",
+      x = "Persone Type",
+      y = "Mean Predicted Similarity"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.y = element_text(size = 12),
+      axis.text.x = element_text(size = 12),
+      plot.title = element_text(size = 14, face = "bold")
+    )
+  }
+}
   
   
   
