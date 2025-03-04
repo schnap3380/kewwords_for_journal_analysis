@@ -6,7 +6,7 @@ full_mod <- bam(
   sim ~ s(year, by = interaction(field, persona, request)) + field * persona * request,
   data = articles
   )
-saveRDS(full_mod, "full_mod.rds")
+saveRDS(full_mod, "full_mod.rds", compress = "xz")
 full_mod <- readRDS("full_mod.rds")
 summary(full_mod)
 

@@ -29,6 +29,8 @@ plot_curves_modelfree <- articles |>
        caption = "Error ribbons represent standard errors.") +
   theme_bw()
 
+ggsave("figures/plot_curves_modelfree.png", plot_curves_modelfree, width = 8, height = 6)
+
 # Visualize Curves (model-based) ------------------------------------------
 
 full_mod <- readRDS("full_mod.rds")
@@ -63,11 +65,13 @@ plot_curves_modelbased <- fit |>
     scale_color_brewer(palette = "Dark2") +
     scale_fill_brewer(palette = "Dark2") +
     facet_grid(persona ~ request) +
-    labs(x = "Year", y = "Similarity between Gemini answers and scientific literature.",
+    labs(x = "Year of Scientific Publication", y = "Similarity between Gemini answers and scientific literature.",
          color = "Field", fill = "Field", 
          title = "Gemini's Fidelity to Scientific Literature Varies by Field and Prompt",
          caption = "Error ribbons represent 95% confidence intervals.") +
     theme_bw()
+
+ggsave("figures/plot_curves_modelbased.png", plot_curves_modelbased, width = 8, height = 6)
 
 # How Up to Date Are LLMs Across Fields? (Model-free) ---------------------
 
